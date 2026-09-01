@@ -1,0 +1,17 @@
+# ---- API layer (containerized; matches the host pip install set, plus serving deps) ----
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg[binary]
+pydantic-settings
+python-multipart
+boto3
+httpx
+pandas
+pyarrow
+pyyaml
+dvc[s3]
+mlflow==2.22.1
+scikit-learn
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0+cpu

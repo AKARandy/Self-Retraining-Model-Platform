@@ -1,0 +1,35 @@
+# secrets
+.env
+*.local
+
+# python
+__pycache__/
+*.pyc
+venv/
+.venv/
+mlruns/
+
+# data (registered through DVC instead) — keep .dvc pointers tracked
+data/raw/**
+!data/raw/**/
+!data/raw/**/*.dvc
+data/processed/**
+!data/processed/**/
+!data/processed/**/*.dvc
+house-prices-advanced-regression-techniques/
+*.zip
+
+# dvc
+.dvc/cache/
+
+# node
+ui/node_modules/
+ui/dist/
+
+# misc
+*.log
+.DS_Store
+
+# internal planning docs (not for the public repo)
+AGENTS.md
+PLAN.md

@@ -1,0 +1,123 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: train-pipeline
+  namespace: argo
+spec:
+  entrypoint: main
+  podSpecPatch: '{"hostAliases":[{"ip":"192.168.65.254","hostnames":["host.minikube.internal"]}]}'
+  arguments:
+    parameters:
+      - {name: dataset_id, value: "1"}
+      - {name: dataset_version, value: "1"}
+      - {name: dataset_version_id, value: "1"}
+      - {name: n_trials, value: "15"}
+      - {name: target, value: SalePrice}
+  templates:
+    - name: main
+      dag:
+        tasks:
+          - {name: ingest, template: ingest-step}
+          - {name: validate, dependencies: [ingest], template: validate-step}
+          - {name: feature-engineer, dependencies: [validate], template: feature-step}
+          - {name: train, dependencies: [feature-engineer], template: train-step}
+          - {name: train-nn, dependencies: [feature-engineer], template: train-nn-step}
+          - {name: evaluate, dependencies: [train, train-nn], template: evaluate-step}
+          - {name: shap, dependencies: [evaluate], template: shap-step}
+          - {name: promote, dependencies: [evaluate], template: promote-step}
+
+    # ------------------------------------------------- shared pod config (anchors)
+    # hostAliases lets pods reach host services without a CoreDNS patch (Docker
+    # Desktop gateway IP; see AGENTS.md if the cluster network changes).
+    - name: ingest-step
+      container:
+        image: mlops-pipeline:dev
+        imagePullPolicy: Never
+        command: [python, pipeline/ingest.py]
+        args: ["--dataset_id", "{{workflow.parameters.dataset_id}}", "--dataset_version", "{{workflow.parameters.dataset_version}}"]
+        env: &stepenv
+          - {name: API_URL, value: "http://host.minikube.internal:8000"}
+          - {name: MLFLOW_TRACKING_URI, value: "http://host.minikube.internal:5000"}
+          - {name: MLFLOW_S3_ENDPOINT_URL, value: "http://host.minikube.internal:9000"}
+          - {name: AWS_ACCESS_KEY_ID, value: minioadmin}
+          - {name: AWS_SECRET_ACCESS_KEY, value: minioadmin}
+          - {name: AWS_DEFAULT_REGION, value: us-east-1}
+          - {name: DATABASE_URL, value: "postgresql+psycopg2://mlops:mlops@host.minikube.internal:5433/mlops"}
+          - {name: ARTIFACT_BUCKET, value: pipeline-artifacts}
+          - {name: WORKFLOW_NAME, value: "{{workflow.name}}"}
+          - {name: TARGET, value: "{{workflow.parameters.target}}"}
+        resources:
+          requests: {cpu: "250m", memory: "512Mi"}
+          limits: {cpu: "1", memory: "1Gi"}
+
+    - name: validate-step
+      container:
+        image: mlops-pipeline:dev
+        imagePullPolicy: Never
+        command: [python, pipeline/validate.py]
+        env: *stepenv
+        resources:
+          requests: {cpu: "250m", memory: "512Mi"}
+          limits: {cpu: "1", memory: "1Gi"}
+
+    - name: feature-step
+      container:
+        image: mlops-pipeline:dev
+        imagePullPolicy: Never
+        command: [python, pipeline/feature_engineer.py]
+        args: ["--dataset_version_id", "{{workflow.parameters.dataset_version_id}}"]
+        env: *stepenv
+        resources:
+          requests: {cpu: "500m", memory: "1Gi"}
+          limits: {cpu: "1", memory: "2Gi"}
+
+    - name: train-step
+      container:
+        image: mlops-pipeline:dev
+        imagePullPolicy: Never
+        command: [python, pipeline/train.py]
+        args: ["--n_trials", "{{workflow.parameters.n_trials}}"]
+        env: *stepenv
+        resources:
+          requests: {cpu: "500m", memory: "1Gi"}
+          limits: {cpu: "1", memory: "2Gi"}
+
+    - name: train-nn-step
+      container:
+        image: mlops-pipeline:dev
+        imagePullPolicy: Never
+        command: [python, pipeline/train_nn.py]
+        env: *stepenv
+        resources:
+          requests: {cpu: "500m", memory: "1Gi"}
+          limits: {cpu: "1", memory: "2Gi"}
+
+    - name: evaluate-step
+      container:
+        image: mlops-pipeline:dev
+        imagePullPolicy: Never
+        command: [python, pipeline/evaluate.py]
+        env: *stepenv
+        resources:
+          requests: {cpu: "250m", memory: "512Mi"}
+          limits: {cpu: "500m", memory: "1Gi"}
+
+    - name: shap-step
+      container:
+        image: mlops-pipeline:dev
+        imagePullPolicy: Never
+        command: [python, pipeline/shap_step.py]
+        env: *stepenv
+        resources:
+          requests: {cpu: "500m", memory: "1Gi"}
+          limits: {cpu: "1", memory: "2Gi"}
+
+    - name: promote-step
+      container:
+        image: mlops-pipeline:dev
+        imagePullPolicy: Never
+        command: [python, pipeline/promote.py]
+        env: *stepenv
+        resources:
+          requests: {cpu: "100m", memory: "256Mi"}
+          limits: {cpu: "250m", memory: "512Mi"}

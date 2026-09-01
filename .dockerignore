@@ -1,0 +1,14 @@
+.git
+.env
+*.local
+.dvc/cache
+backups
+mlops-backups
+data
+house-prices-advanced-regression-techniques
+*.zip
+ui
+scripts/__pycache__
+**/__pycache__
+*.log
+coredns.yaml

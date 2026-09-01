@@ -1,0 +1,16 @@
+scikit-learn
+pandas
+pyarrow
+numpy<2.2
+setuptools==80.9.0
+optuna
+mlflow==2.22.1
+featuretools
+shap
+matplotlib
+psycopg2-binary
+sqlalchemy
+boto3
+requests
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.8.0+cpu

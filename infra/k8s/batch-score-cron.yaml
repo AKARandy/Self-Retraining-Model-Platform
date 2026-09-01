@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: CronWorkflow
+metadata:
+  name: batch-score
+  namespace: argo
+spec:
+  schedules: ["0 * * * *"]
+  concurrencyPolicy: Forbid
+  workflowSpec:
+    entrypoint: batch-score
+    podSpecPatch: '{"hostAliases":[{"ip":"192.168.65.254","hostnames":["host.minikube.internal"]}]}'
+    templates:
+      - name: batch-score
+        container:
+          image: mlops-pipeline:dev
+          imagePullPolicy: Never
+          command: [python, pipeline/batch_score.py]
+          env:
+            - {name: MLFLOW_TRACKING_URI, value: "http://host.minikube.internal:5000"}
+            - {name: MLFLOW_S3_ENDPOINT_URL, value: "http://host.minikube.internal:9000"}
+            - {name: AWS_ACCESS_KEY_ID, value: minioadmin}
+            - {name: AWS_SECRET_ACCESS_KEY, value: minioadmin}
+            - {name: AWS_DEFAULT_REGION, value: us-east-1}
+            - {name: DATABASE_URL, value: "postgresql+psycopg2://mlops:mlops@host.minikube.internal:5433/mlops"}
+            - {name: ARTIFACT_BUCKET, value: pipeline-artifacts}
+            - {name: WORKFLOW_NAME, value: "{{workflow.name}}"}
+            - {name: TARGET, value: SalePrice}
+          resources:
+            requests: {cpu: "250m", memory: "512Mi"}
+            limits: {cpu: "1", memory: "1Gi"}
