@@ -72,7 +72,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r docker/requirements-training.txt
-          pip install pytest pytest-cov
+          # shared tests/conftest.py imports app.core.db/config/security at load time:
+          # pydantic-settings (config), fastapi (security), psycopg (engine dialect import)
+          pip install pytest pytest-cov pydantic-settings fastapi "psycopg[binary]"
       - name: Run isolated pipeline tests
         run: |
           pytest tests/pipeline -q --cov=pipeline --cov-report=term-missing --cov-report=xml
@@ -100,6 +102,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Provision environment file (placeholders only — real secrets never live in CI)
+        run: cp .env.example .env
       - name: Docker compose config check
         run: docker compose -f infra/docker-compose.yml config -q
       - name: Build API image (no push)

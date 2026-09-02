@@ -39,3 +39,6 @@ htmlcov/
 AGENTS.md
 PLAN.md
 VERTWOPLAN.MD
+
+# local tooling artifacts
+.zcode/
