@@ -9,6 +9,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
 COPY .dvc ./.dvc
 COPY docker/api-entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && mkdir -p data/raw
@@ -16,5 +18,5 @@ RUN chmod +x /entrypoint.sh && mkdir -p data/raw
 ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
-# entrypoint repoints the DVC remote at the in-network MinIO before serving
+# entrypoint migrates DB (alembic upgrade head) and repoints DVC remote before serving
 ENTRYPOINT ["/entrypoint.sh"]

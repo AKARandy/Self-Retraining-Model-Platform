@@ -1,12 +1,8 @@
 """Step 6: evaluate — compare the freshly trained model against current Production; write decision."""
-import io
 import os
 
 import mlflow.sklearn
-import numpy as np
-import pandas as pd
-
-from common import TARGET, WORKFLOW_NAME, get_artifact, get_json, put_json
+from common import WORKFLOW_NAME, get_json, put_json
 
 
 def main() -> None:
@@ -32,13 +28,19 @@ def main() -> None:
     if prod is None:
         promote, reason = True, "no production model yet"
     else:
-        prod_metrics = c.get_run(prod.run_id).data.metrics
-        prod_rmse = prod_metrics.get("rmse")
+        try:
+            prod_metrics = c.get_run(prod.run_id).data.metrics
+            prod_rmse = prod_metrics.get("rmse")
+        except Exception:
+            prod_rmse = None
         if prod_rmse is None:
             promote, reason = True, "production model has no logged rmse"
+        elif prod_rmse == 0:
+            promote, reason = True, "production rmse is 0"
         else:
             improve = (prod_rmse - new_rmse) / prod_rmse
-            promote = improve > 0.0
+            # Require >1% improvement to avoid churn on noise
+            promote = improve > 0.01
             reason = f"new rmse {new_rmse:.1f} vs prod {prod_rmse:.1f} ({improve * 100:+.2f}%)"
 
     decision = {

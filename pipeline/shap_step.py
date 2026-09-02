@@ -1,7 +1,6 @@
 """Step 7: shap — TreeExplainer summary for the winning sklearn model, logged to its run."""
 import io
 import os
-import pickle
 import tempfile
 
 import matplotlib
@@ -11,8 +10,7 @@ import matplotlib.pyplot as plt
 import mlflow.sklearn
 import pandas as pd
 import shap
-
-from common import TARGET, WORKFLOW_NAME, get_artifact, get_json, put_json
+from common import TARGET, WORKFLOW_NAME, get_artifact, get_json
 
 
 def main() -> None:

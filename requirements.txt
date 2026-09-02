@@ -12,6 +12,7 @@ pyarrow
 pyyaml
 dvc[s3]
 mlflow==2.22.1
+alembic
 scikit-learn
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.8.0+cpu

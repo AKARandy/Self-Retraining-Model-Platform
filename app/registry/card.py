@@ -1,5 +1,4 @@
 """Model card rendering: run metrics + params + SHAP summary + lineage."""
-import io
 import json
 from datetime import datetime, timezone
 
@@ -34,25 +33,35 @@ _Generated {generated_at} — metrics and SHAP values are read live from the run
 """
 
 
-def _latest_shap() -> dict | None:
+def _latest_shap_for_run(run_id: str | None = None, model_name: str | None = None) -> dict | None:
+    """Prefer SHAP tied to this run/model; fall back to global latest (back-compat)."""
     s3 = dvc_io.s3_client()
+    # Try run-scoped keys first if run_id available (future: shap artifacts stored per-run).
+    if run_id:
+        for prefix in [f"houses/{run_id}/shap_top20.json", f"houses/{model_name or ''}/shap_top20.json"]:
+            try:
+                return json.loads(dvc_io.get_artifact(prefix))
+            except Exception:
+                pass
+    # Fallback: global latest (current pipeline writes houses/<workflow>/shap_top20.json)
     resp = s3.list_objects_v2(Bucket=dvc_io.settings.bucket_artifacts, Prefix="houses/")
-    keys = [
-        o
-        for o in resp.get("Contents", [])
-        if o["Key"].endswith("shap_top20.json")
-    ]
+    keys = [o for o in resp.get("Contents", []) if o["Key"].endswith("shap_top20.json")]
     if not keys:
         return None
     latest = max(keys, key=lambda o: o["LastModified"])
     return json.loads(dvc_io.get_artifact(latest["Key"]))
 
 
+def _latest_shap() -> dict | None:
+    # Back-compat wrapper
+    return _latest_shap_for_run()
+
+
 def render_card(mv, run, tracking_uri: str) -> str:
     metrics = run.data.metrics
     metrics_rows = "\n".join(f"| {k} | {v:.4f} |" for k, v in sorted(metrics.items())) or "| (none logged) | |"
 
-    shap = _latest_shap()
+    shap = _latest_shap_for_run(run_id=run.info.run_id, model_name=getattr(mv, "name", None))
     if shap and shap.get("top_features"):
         tops = "\n".join(
             f"{i + 1}. `{t['feature']}` — mean |SHAP| {t['mean_abs_shap']:.1f}"

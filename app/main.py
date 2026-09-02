@@ -2,19 +2,18 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from .core.db import Base, engine
-from .core import models as _models  # noqa: F401 — register tables before create_all
 from .core.config import settings
 from .data.routes import router as data_router
-from .registry.routes import router as registry_router
-from .training.routes import router as training_router
-from .serving.routes import router as serving_router
 from .monitoring.routes import router as monitoring_router
+from .registry.routes import router as registry_router
+from .serving.routes import router as serving_router
+from .training.routes import router as training_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(engine)
+    # Schema is owned by Alembic — do not create_all here.
+    # See alembic/env.py and docker/api-entrypoint.sh (alembic upgrade head).
     yield
 
 

@@ -2,9 +2,7 @@
 import os
 
 import mlflow
-
 from common import WORKFLOW_NAME, get_json
-
 from mlflow.tracking import MlflowClient
 
 

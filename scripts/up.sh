@@ -44,6 +44,9 @@ kubectl apply -f infra/k8s/train-workflow-template.yaml
 kubectl apply -f infra/k8s/batch-score-cron.yaml
 
 step "4/7 pipeline image into node"
+# Explicit build before load — closes stale-tag gap (VERTWOPLAN §18.1 + deploy-local.sh)
+echo "building mlops-pipeline:dev ..."
+docker build -f docker/pipeline.Dockerfile -t mlops-pipeline:dev . 2>&1 | tail -3
 # rmi first: 'minikube image load' does not reliably overwrite an existing tag
 minikube ssh "docker ps -aq --filter ancestor=mlops-pipeline:dev --filter status=exited | xargs -r docker rm -f; docker rmi -f mlops-pipeline:dev" >/dev/null 2>&1 || true
 minikube image load mlops-pipeline:dev

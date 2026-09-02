@@ -1,4 +1,3 @@
-import os
 
 import httpx
 from sqlalchemy.orm import Session

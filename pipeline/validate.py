@@ -2,7 +2,6 @@
 import io
 
 import pandas as pd
-
 from common import TARGET, WORKFLOW_NAME, get_artifact, put_artifact, put_json
 
 
@@ -13,7 +12,7 @@ def main() -> None:
     report = {"checks": [], "dropped_columns": [], "fatal": []}
 
     ok_rows = len(df) >= 100
-    report["checks"].append({"check": "min_rows", "ok": ok_rows, "n_rows": int(len(df))})
+    report["checks"].append({"check": "min_rows", "ok": ok_rows, "n_rows": len(df)})
     if not ok_rows:
         report["fatal"].append("dataset too small")
 
