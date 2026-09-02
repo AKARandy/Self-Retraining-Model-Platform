@@ -55,6 +55,7 @@ def test_drift_triggers_at_z_gt_2(client, api_key, db):
     # live mean 1300 => z = |1000-1300|/100 = 3.0 > 2.0 -> drift
     _add_predictions(db, dv, n=25, grlivarea_value=1300)
     from unittest.mock import patch
+
     from app.core.models import TrainingRun
 
     def _fake_submit(db_, dataset_id=None, dataset_version=None, n_trials=15):
