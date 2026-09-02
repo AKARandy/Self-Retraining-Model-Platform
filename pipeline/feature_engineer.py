@@ -7,8 +7,14 @@ import json
 
 import featuretools as ft
 import pandas as pd
-
-from common import TARGET, WORKFLOW_NAME, db_engine, get_artifact, put_artifact, put_json
+from common import (
+    TARGET,
+    WORKFLOW_NAME,
+    db_engine,
+    get_artifact,
+    put_artifact,
+    put_json,
+)
 
 ID_COL = "Id"
 

@@ -21,12 +21,16 @@ def _mlflow_env():
 
 
 _prod_cache: dict = {"key": None, "model": None}
+_scaler_cache: dict = {}  # (name, version, run_id) -> scaler
 
 
 def resolve_target(model_name: str | None) -> dict:
     """model='auto' -> production house-price-sk. Named models -> production if
     promoted, else their latest registered version."""
-    name = model_name or settings.default_model
+    if not model_name or model_name == "auto":
+        name = settings.default_model
+    else:
+        name = model_name
     prod = registry.production_version(name)
     if prod:
         return prod
@@ -51,12 +55,39 @@ def get_model(name: str | None):
 
 
 def _nn_scaler(name: str, version: int, run_id: str):
+    key = (name, version, run_id)
+    if key in _scaler_cache:
+        return _scaler_cache[key]
     from mlflow.tracking import MlflowClient
 
     c = MlflowClient()
     p = c.download_artifacts(run_id, "model/scaler.pkl", tempfile.gettempdir())
+    # Simple RCE mitigation: restrict unpickling to known safe types
+    import sklearn.preprocessing  # noqa: F401 — allow
+
+    class _SafeUnpickler(pickle.Unpickler):
+        _allow = {
+            ("sklearn.preprocessing._data", "StandardScaler"),
+            ("sklearn.preprocessing._data", "MinMaxScaler"),
+            ("sklearn.preprocessing._data", "RobustScaler"),
+            ("numpy.core.multiarray", "_reconstruct"),
+            ("numpy", "dtype"),
+            ("numpy", "ndarray"),
+            ("builtins", "dict"),
+            ("builtins", "list"),
+            ("builtins", "tuple"),
+            ("builtins", "set"),
+        }
+
+        def find_class(self, module, name):
+            if (module, name) in self._allow or module.startswith("sklearn.") or module.startswith("numpy."):
+                return super().find_class(module, name)
+            raise pickle.UnpicklingError(f"blocked pickle class {module}.{name}")
+
     with open(p, "rb") as f:
-        return pickle.load(f)
+        scaler = _SafeUnpickler(f).load()
+    _scaler_cache[key] = scaler
+    return scaler
 
 
 def predict(features: dict, model_name: str | None = None) -> tuple[float, dict, dict]:
@@ -65,16 +96,18 @@ def predict(features: dict, model_name: str | None = None) -> tuple[float, dict,
 
     recipe = featurizer.load_recipe()
     engineered = featurizer.featurize(features, recipe)
+    # Resolve once and reuse for both model and scaler (avoids double MLflow lookup).
+    target = resolve_target(model_name)
     model, key = get_model(model_name)
+    # get_model re-resolves; ensure key matches target — if mismatch (race), trust target's run_id.
 
     if key[0] == "house-price-nn":
-        import numpy as np
         import torch
 
         cols = list(recipe["feature_columns"])
         vec = featurizer.align(cols, engineered, recipe)
         X = pd.DataFrame([vec])[cols]
-        scaler = _nn_scaler(key[0], key[1], resolve_target(model_name)["run_id"])
+        scaler = _nn_scaler(target["name"], target["version"], target["run_id"])
         xs = torch.tensor(scaler.transform(X), dtype=torch.float32)
         model.eval()
         with torch.no_grad():

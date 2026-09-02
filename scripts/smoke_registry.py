@@ -2,18 +2,18 @@
 register it as house-price-sk — promoted later through the API endpoint."""
 import json
 import os
+import sys
+from pathlib import Path
 
-import numpy as np
 import mlflow
 import mlflow.sklearn
+import numpy as np
 from mlflow.models import infer_signature
 from sklearn.linear_model import LinearRegression
 
-import sys
-from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from app.core.config import settings  # noqa: E402
+from app.core.config import settings
 
 os.environ["MLFLOW_S3_ENDPOINT_URL"] = f"http://{settings.minio_endpoint}"
 os.environ["AWS_ACCESS_KEY_ID"] = settings.minio_access_key

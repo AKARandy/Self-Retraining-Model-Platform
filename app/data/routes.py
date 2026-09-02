@@ -21,6 +21,8 @@ def upload_dataset(
     content = file.file.read()
     if not content:
         raise HTTPException(400, "empty file")
+    if len(content) > 50 * 1024 * 1024:
+        raise HTTPException(413, "file too large (max 50MB)")
     try:
         row = service.upload_version(
             db,
@@ -30,7 +32,11 @@ def upload_dataset(
             target_column=target_column or None,
         )
     except Exception as e:
-        raise HTTPException(500, f"upload failed: {e}")
+        # Don't leak internals
+        import logging
+
+        logging.getLogger(__name__).exception("upload failed")
+        raise HTTPException(500, "upload failed")
     record(db, "upload_dataset", f"{row.dataset_id}/v{row.version}", allowed=True, detail={"dvc_md5": row.dvc_md5})
     return {
         "dataset_id": row.dataset_id,

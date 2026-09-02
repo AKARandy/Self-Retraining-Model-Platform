@@ -1,12 +1,10 @@
 import io
-import math
 from pathlib import Path
 
 import pandas as pd
 from sqlalchemy import func as safunc
 from sqlalchemy.orm import Session
 
-from ..core.config import settings
 from ..core.models import Dataset, DatasetVersion
 from . import dvc_io
 
@@ -38,6 +36,14 @@ def upload_version(
     content: bytes,
     target_column: str | None = None,
 ) -> DatasetVersion:
+    import re
+
+    # Simple name validation — prevent path traversal and DB errors
+    if not re.fullmatch(r"[a-zA-Z0-9._-]{1,100}", name):
+        raise ValueError("invalid dataset name (alphanumeric, . _ - , max 100)")
+    if target_column and len(target_column) > 100:
+        raise ValueError("target_column too long")
+
     ds = db.query(Dataset).filter_by(name=name).first()
     if ds is None:
         ds = Dataset(name=name)
@@ -46,10 +52,24 @@ def upload_version(
 
     next_v = (db.query(safunc.max(DatasetVersion.version)).filter_by(dataset_id=ds.id).scalar() or 0) + 1
 
-    df = pd.read_csv(io.BytesIO(content))
+    try:
+        df = pd.read_csv(io.BytesIO(content))
+    except Exception as e:
+        raise ValueError(f"invalid CSV: {e}")
+    if df.empty:
+        raise ValueError("empty dataset")
+    if df.shape[1] > 500 or df.shape[0] > 1_000_000:
+        raise ValueError("dataset too large")
+    if target_column and target_column not in df.columns:
+        raise ValueError(f"target_column {target_column!r} not in columns")
     suffix = Path(filename).suffix or ".csv"
+    if suffix not in (".csv", ".txt"):
+        suffix = ".csv"
     rel = Path("data/raw") / name / f"v{next_v}{suffix}"
-    dest = dvc_io.REPO / rel
+    dest = (dvc_io.REPO / rel).resolve()
+    base = (dvc_io.REPO / "data" / "raw").resolve()
+    if not str(dest).startswith(str(base)):
+        raise ValueError("invalid path")
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(content)
 

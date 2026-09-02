@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-tests:
+    name: api-tests (unit+integration, 70% app cov, alembic check, ruff)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: mlops
+          POSTGRES_PASSWORD: mlops
+          POSTGRES_DB: mlops
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready -U mlops -d mlops"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=30
+    env:
+      DATABASE_URL: postgresql+psycopg://mlops:mlops@localhost:5432/mlops
+      TEST_DATABASE_URL: postgresql+psycopg://mlops:mlops@localhost:5432/mlops
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dev deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Alembic upgrade head (test DB)
+        run: alembic upgrade head
+      - name: Alembic check (no pending model changes)
+        run: alembic check
+      - name: Ruff
+        run: ruff check .
+      - name: Pytest (unit+integration) with 70% app coverage gate
+        run: |
+          pytest -m "unit or integration" -q --cov=app --cov-report=term-missing --cov-report=xml --cov-fail-under=70
+          echo "## api-tests" >> $GITHUB_STEP_SUMMARY
+          echo "app coverage >=70% passed" >> $GITHUB_STEP_SUMMARY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  pipeline-tests:
+    name: pipeline-tests (isolated, non-gating coverage)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install training + test deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r docker/requirements-training.txt
+          # shared tests/conftest.py imports app.core.db/config/security at load time:
+          # pydantic-settings (config), fastapi (security), psycopg (engine dialect import)
+          pip install pytest pytest-cov pydantic-settings fastapi "psycopg[binary]"
+      - name: Run isolated pipeline tests
+        run: |
+          pytest tests/pipeline -q --cov=pipeline --cov-report=term-missing --cov-report=xml
+          echo "## pipeline-tests" >> $GITHUB_STEP_SUMMARY
+
+  ui-build:
+    name: ui-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Install + build
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+          echo "## ui-build ok" >> $GITHUB_STEP_SUMMARY
+
+  container-validation:
+    name: container-validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Provision environment file (placeholders only — real secrets never live in CI)
+        run: cp .env.example .env
+      - name: Docker compose config check
+        run: docker compose -f infra/docker-compose.yml config -q
+      - name: Build API image (no push)
+        run: docker build -f docker/api.Dockerfile -t mlops-api:dev .
+      - name: Build MLflow image (no push)
+        run: docker build -f docker/mlflow.Dockerfile -t mlops-mlflow:2.22.1 .
+      - name: Build pipeline image (no push)
+        run: docker build -f docker/pipeline.Dockerfile -t mlops-pipeline:dev .
+      - name: Validate Argo YAML
+        run: python -c "import yaml, pathlib; [yaml.safe_load(open(p)) for p in pathlib.Path('infra/k8s').glob('*.yaml')]; print('yaml ok')"
+        # Public-repo safeguard: no workflow with pull_request/push ever uses self-hosted (see VERTWOPLAN §17)

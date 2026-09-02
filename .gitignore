@@ -29,7 +29,16 @@ ui/dist/
 # misc
 *.log
 .DS_Store
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+.ruff_cache/
 
 # internal planning docs (not for the public repo)
 AGENTS.md
 PLAN.md
+VERTWOPLAN.MD
+
+# local tooling artifacts
+.zcode/

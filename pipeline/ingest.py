@@ -3,8 +3,15 @@ import io
 import sys
 
 import pandas as pd
-
-from common import ARTIFACT_BUCKET, TARGET, WORKFLOW_NAME, fetch_dataset_content, md5_bytes, put_artifact, put_json
+from common import (
+    ARTIFACT_BUCKET,
+    TARGET,
+    WORKFLOW_NAME,
+    fetch_dataset_content,
+    md5_bytes,
+    put_artifact,
+    put_json,
+)
 
 
 def main() -> None:

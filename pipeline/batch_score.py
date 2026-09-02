@@ -5,9 +5,8 @@ import io
 import os
 
 import pandas as pd
+from common import DB_URL, get_artifact, get_json
 from sqlalchemy import create_engine, text
-
-from common import DB_URL, WORKFLOW_NAME, get_artifact, get_json
 
 BATCH_SIZE = 100
 

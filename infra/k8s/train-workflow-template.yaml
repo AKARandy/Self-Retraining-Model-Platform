@@ -24,7 +24,7 @@ spec:
           - {name: train-nn, dependencies: [feature-engineer], template: train-nn-step}
           - {name: evaluate, dependencies: [train, train-nn], template: evaluate-step}
           - {name: shap, dependencies: [evaluate], template: shap-step}
-          - {name: promote, dependencies: [evaluate], template: promote-step}
+          - {name: promote, dependencies: [shap], template: promote-step}
 
     # ------------------------------------------------- shared pod config (anchors)
     # hostAliases lets pods reach host services without a CoreDNS patch (Docker

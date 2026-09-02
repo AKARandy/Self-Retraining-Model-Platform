@@ -79,15 +79,11 @@ Windows host
    swap=4GB
    ```
    then `wsl --shutdown` once. (16 GB host machines should not give the VM more than 8 GB.)
-7. `cd` into the repo, create `.env`:
+7. `cd` into the repo, create `.env` from the committed template, then set a real key:
    ```bash
-   printf 'API_KEY=%s\n' "$(openssl rand -hex 24)" > .env
-   cat >> .env <<'EOF'
-   DATABASE_URL=postgresql+psycopg://mlops:mlops@localhost:5433/mlops
-   MINIO_ENDPOINT=localhost:9000
-   MLFLOW_TRACKING_URI=http://localhost:5000
-   ARGO_URL=https://localhost:2746
-   EOF
+   cp .env.example .env
+   # edit .env: replace API_KEY with the output of  openssl rand -hex 24
+   # (endpoint defaults are correct for a local install — see .env.example comments)
    ```
 
 ### 2b. Bring-up — one command
@@ -288,7 +284,78 @@ the SHAP step's explainer.
 
 ---
 
-## 5. How to stop
+## 5. Migrations, tests, CI/CD
+
+### Migrations (Alembic — `mlops` DB only)
+
+**Setup:** Alembic owns the 7 app tables (`datasets`, `dataset_versions`, `feature_sets`, `training_runs`, `predictions`, `drift_checks`, `audit_log`). MLflow's `mlflow` database is separate and untouched.
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+# fresh DB (CI or new install): creates all 7 tables
+alembic upgrade head
+alembic check   # must say "No new upgrade operations"
+# existing populated DB (one-time baseline): backup → check → stamp (never creates tables)
+bash scripts/baseline-existing-db.sh
+# contributor loop for schema changes:
+alembic revision --autogenerate -m "add column X"
+# manually review generated SQL, then:
+alembic upgrade head
+alembic check
+```
+
+Backups via `MLOPS_BACKUP_DIR` (default `C:\Users\LENOVO\mlops-backups\migration-baselines`, override with env var). Pre-flight checks `pg_database` shows `mlops` + `mlflow` on same server — `mlops` connection cannot see `mlflow` tables (Postgres isolates at database level); `alembic/env.py` `include_object` is defense-in-depth no-op.
+
+The API container runs `alembic upgrade head` automatically before Uvicorn (`docker/api-entrypoint.sh`), so clean installs migrate idempotently.
+
+### Tests
+
+```bash
+# unit + integration (disposable file DB or Postgres service, never 5433)
+pip install -r requirements.txt -r requirements-dev.txt
+pytest -m "unit or integration" -q --cov=app --cov-fail-under=70
+# pipeline helpers (isolated; skips featuretools if not installed locally)
+pytest tests/pipeline -q
+# all
+pytest -q --cov=app --cov-report=term-missing
+```
+
+Coverage gate: `app/` ≥70% line (`--cov-fail-under=70`). Pipeline coverage collected non-gating. Mocks at boundaries: DVC/S3, MLflow client, Argo HTTP, artifacts; data-upload tests use `tmp_path` repo. Writes are audited (including `POST /predict` and `POST /monitoring/check-drift` successes — contract fix in `app/serving/routes.py` / `app/monitoring/routes.py`).
+
+Drift threshold: `Z_THRESHOLD=2.0` (≈5% two-tailed; old `0.5` fired on ~62% noise). Family-wise rate compounds across independent per-feature z-tests — e.g. ~26% spurious at 6 features; future mitigation is Bonferroni or require ≥2 breaches (see `VERTWOPLAN.md §19.3`).
+
+### CI (GitHub Actions)
+
+`.github/workflows/ci.yml` triggers on `pull_request` + `push: main` (`permissions: contents: read`):
+
+| Job | What |
+|---|---|
+| `api-tests` | Postgres 16 service, `alembic upgrade head` + `alembic check` + `ruff check .` + `pytest -m "unit or integration" --cov-fail-under=70` |
+| `pipeline-tests` | `docker/requirements-training.txt` + `pytest tests/pipeline` (non-gating cov) |
+| `ui-build` | Node 22, `npm ci` + `npm run build` in `ui/` |
+| `container-validation` | `docker compose config -q` + build 3 images (api/mlflow/pipeline) + `yaml.safe_load` on `infra/k8s/*.yaml` |
+
+Branch protection on `main`: block direct push, require PR, require 4 checks, no required reviewer, `deploy-local` not required. Public-repo safeguard: no `pull_request`/`push` workflow ever uses `self-hosted` label — only `deploy-local.yml` `workflow_dispatch` does (see `VERTWOPLAN.md §17`).
+
+### CD — Local deploy
+
+Manual (default, 90% skill signal, zero runner setup):
+
+```bash
+bash scripts/deploy-local.sh <40-char-SHA>  # SHA must be ancestor of origin/main and CI-green (operator verifies)
+```
+
+Or via one-command `bash scripts/up.sh` (now explicitly `docker build -f docker/pipeline.Dockerfile -t mlops-pipeline:dev .` before `minikube image load`).
+
+Full flow (same for manual and GitHub): validate tools/SHA/`.env` (`MLOPS_ENV_FILE` default `C:/Users/LENOVO/.mlops-deploy/platform.env`, never logged) → build 3 images → start `postgres`+`minio` → backup + `alembic upgrade head` if needed → `docker compose up -d api mlflow` → `minikube start` + `docker rmi`/`image load` + `kubectl apply` WorkflowTemplate/CronWorkflow → health checks (API/MLflow/compose/minikube/Argo/`alembic current`) → write SHA/revision/image IDs to `GITHUB_STEP_SUMMARY` or `deploy-summary-*.md`. On failure, leave diagnostics; recover by redispatching a prior green SHA (migrations forward-only, must stay compatible).
+
+Opt-in GitHub self-hosted automation: `.github/workflows/deploy-local.yml` `workflow_dispatch` only, on runner labels `[self-hosted, Windows, X64, docker, minikube]`, protected environment `local-minikube`, verifies SHA ancestor + CI green, stages `MLOPS_ENV_FILE` → `.env`, runs `scripts/deploy-local.sh`, always cleans `.env`. Runner must be installed interactively (not as `LocalSystem`) to own Docker pipe and kubeconfig.
+
+Explicit boundary: GitHub deploys **only** to this trusted local machine; no cloud, no registry publish, no full Argo training in CI (too heavy; local smoke-test). Dashboard build-validated but not containerized this phase.
+
+---
+
+## 6. How to stop
 
 **One command:** `bash scripts/down.sh` — kills the API/dashboard processes, removes the compose
 containers (**volumes kept**), freezes minikube, and stops the port-forward. `scripts/up.sh` reverses it.

@@ -1,0 +1,10 @@
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "E402", "F841"]
+# Allow long lines for test data fixtures — but keep import sorting
+[lint.pycodestyle]
+max-line-length = 120
+# B008 (FastAPI Depends/File), BLE001 etc. not selected — FastAPI patterns are idiomatic

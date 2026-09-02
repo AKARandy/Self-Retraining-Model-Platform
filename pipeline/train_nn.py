@@ -1,20 +1,18 @@
 """Step 5: train-nn — small PyTorch MLP on the same split, registered as house-price-nn."""
 import io
 import os
-import sys
 
 import mlflow
 import mlflow.pytorch
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
+from common import TARGET, WORKFLOW_NAME, clean_features, get_artifact, put_json
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
+from torch import nn
 from torch.utils.data import DataLoader, TensorDataset
-
-from common import TARGET, WORKFLOW_NAME, clean_features, get_artifact, put_json
 
 ID_COL = "Id"
 EPOCHS = 300

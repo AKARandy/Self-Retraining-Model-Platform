@@ -9,12 +9,11 @@ import mlflow.sklearn
 import numpy as np
 import optuna
 import pandas as pd
+from common import TARGET, WORKFLOW_NAME, clean_features, get_artifact, put_json
 from mlflow.models import infer_signature
 from sklearn.ensemble import HistGradientBoostingRegressor, RandomForestRegressor
 from sklearn.metrics import mean_absolute_error, r2_score
 from sklearn.model_selection import train_test_split
-
-from common import TARGET, WORKFLOW_NAME, clean_features, get_artifact, put_json
 
 ID_COL = "Id"
 
@@ -86,12 +85,15 @@ def main() -> None:
             trial.set_user_attr("run_id", run.info.run_id)
         return rmse
 
-    parent = mlflow.start_run(run_name="optuna-study")
-    study.optimize(objective, n_trials=n_trials)
-    best = study.best_trial
-    mlflow.log_params({f"best_{k}": v for k, v in best.params.items()})
-    mlflow.log_metric("best_trial_rmse", study.best_value)
-    mlflow.end_run()
+    # Use context manager so parent run is closed even if optimize fails
+    with mlflow.start_run(run_name="optuna-study") as parent:
+        study.optimize(objective, n_trials=n_trials)
+        if not study.best_trial or len([t for t in study.trials if t.state.name == "COMPLETE"]) == 0:
+            raise SystemExit("no successful trials")
+        best = study.best_trial
+        mlflow.log_params({f"best_{k}": v for k, v in best.params.items()})
+        mlflow.log_metric("best_trial_rmse", study.best_value)
+        parent_run_id = parent.info.run_id
 
     # final model with the winning hyperparameters, logged + registered
     with mlflow.start_run(run_name="final-model") as final:
@@ -123,7 +125,7 @@ def main() -> None:
         "model_name": "house-price-sk",
         "model_version": version,
         "run_id": final_run_id,
-        "study_run_id": parent.info.run_id,
+        "study_run_id": parent_run_id,
         "best_params": json.loads(json.dumps(best.params)),
         "n_trials": n_trials,
         "metrics": metrics,
