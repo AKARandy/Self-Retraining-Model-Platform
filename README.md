@@ -1,6 +1,8 @@
 # Self-Retraining Model Platform
 ### an MLOps platform
 
+[![CI](https://github.com/AKARandy/Self-Retraining-Model-Platform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AKARandy/Self-Retraining-Model-Platform/actions/workflows/ci.yml)
+
 A platform that runs one closed loop end to end:
 **live traffic → drift detection → automatic retraining → conditional promotion → served, zero redeploy.**
 
