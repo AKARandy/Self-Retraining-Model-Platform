@@ -79,15 +79,11 @@ Windows host
    swap=4GB
    ```
    then `wsl --shutdown` once. (16 GB host machines should not give the VM more than 8 GB.)
-7. `cd` into the repo, create `.env`:
+7. `cd` into the repo, create `.env` from the committed template, then set a real key:
    ```bash
-   printf 'API_KEY=%s\n' "$(openssl rand -hex 24)" > .env
-   cat >> .env <<'EOF'
-   DATABASE_URL=postgresql+psycopg://mlops:mlops@localhost:5433/mlops
-   MINIO_ENDPOINT=localhost:9000
-   MLFLOW_TRACKING_URI=http://localhost:5000
-   ARGO_URL=https://localhost:2746
-   EOF
+   cp .env.example .env
+   # edit .env: replace API_KEY with the output of  openssl rand -hex 24
+   # (endpoint defaults are correct for a local install — see .env.example comments)
    ```
 
 ### 2b. Bring-up — one command
