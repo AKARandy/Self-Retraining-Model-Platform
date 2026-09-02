@@ -42,3 +42,6 @@ VERTWOPLAN.MD
 
 # local tooling artifacts
 .zcode/
+
+# personal quickstart (machine-specific, not for the public repo)
+quickstart.md
