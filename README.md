@@ -8,7 +8,7 @@
 Machine learning models rot. A model trained on last year's data quietly gets worse as the world
 moves on: prices shift, customers behave differently, sensors drift. Most teams only find out after
 the damage shows up in revenue or angry users. And fixing it is manual work: an engineer notices,
-pulls fresh data, retrains, compares, deploys. Slow, boring, easy to postpone until it hurts.
+pulls fresh data, retrains, compares, deploys. It is slow, boring work, and easy to postpone until it hurts.
 
 ## What this is
 
@@ -18,7 +18,7 @@ A platform that does that whole job by itself, in a loop:
 2. It watches every prediction that comes in and compares it against the data the model trained on.
 3. When the new data looks different enough, it retrains on its own. Nobody clicks anything.
 4. It tests the new model against the old one. The new one only goes live if it scores better.
-   Otherwise it stays on the shelf, with the reason recorded.
+   But a worse model stays on the shelf, with the reason recorded.
 5. Swapping models needs no redeploy and no downtime.
 
 ## How it works, and why these tools
@@ -38,14 +38,15 @@ Behind it, each job has its own tool, all running locally in containers:
 - DVC versions the datasets, so any model can be traced back to the exact data it trained on.
 - A React dashboard shows it all on one page: the live model, the datasets, the runs, the drift checks.
 
-The drift check itself is deliberately boring statistics: compare the average of incoming values
-against the training average, column by column. No black boxes. Cheap to run, easy to understand.
+However, the drift check itself is deliberately boring statistics, which is the point: compare
+the average of incoming values against the training average, column by column. No black boxes.
+Cheap to run, easy to understand.
 
 The house prices dataset is only a stand-in to prove the loop works. The pipeline takes any flat
 CSV table, and §4.1 covers swapping it for another case.
 
-Everything runs locally, but each piece maps to a cloud equivalent (Postgres to RDS, MinIO to S3,
-minikube to EKS), so the design carries over when you outgrow a laptop.
+Everything runs locally. Thus the whole thing fits on one machine, but each piece maps to a cloud
+equivalent (Postgres to RDS, MinIO to S3, minikube to EKS) when you outgrow the laptop.
 
 *Keywords: MLOps · Argo Workflows · drift detection · Optuna · MLflow · DVC · FastAPI · Kubernetes.*
 
