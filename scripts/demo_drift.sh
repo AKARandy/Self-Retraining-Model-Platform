@@ -15,7 +15,7 @@ import json, sys
 import pandas as pd, requests
 
 df = pd.read_csv("data/raw/inbox/kaggle_train.csv").sample(40, random_state=1)
-df["GrLivArea"] = (df["GrLivArea"] * 1.6).round(0)      # strong shift
+df["GrLivArea"] = (df["GrLivArea"] * 2.2).round(0)      # strong shift (z~=3.4 vs Z_THRESHOLD 2.0; x1.6 only reached z~=1.7)
 df["LotArea"] = (df["LotArea"] * 1.5).round(0)
 df["YearBuilt"] = df["YearBuilt"] + 40
 key = open(".env").read().split("API_KEY=")[1].splitlines()[0]

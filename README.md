@@ -17,6 +17,19 @@ the pipeline is dataset-agnostic, and §4.1 covers swapping it for any case.
 
 ---
 
+## In action (verified local run, 2026-09-15)
+
+The loop below is real — these are screenshots of the actual stack, not mockups.
+Left: the dashboard with live data (Production v5, dataset v1, run #1 Succeeded, drift check #2 firing).
+Right: the auto-triggered retraining DAG in Argo, all 8 nodes green.
+
+![dashboard with live data](docs/screenshots/01-dashboard.png)
+![retraining DAG succeeded in Argo](docs/screenshots/04-argo-dag-succeeded.png)
+
+*Screenshots from a verified local run, 2026-09-15.*
+
+---
+
 ## 1. What is it
 
 ```
@@ -159,10 +172,49 @@ Buttons let you submit a run or fire a drift check.
 | Drift history | `GET /monitoring/drift-checks` |
 | Batch score (100 rows, hourly cron) | `argo submit --from cronworkflow/batch-score -n argo -k` |
 
-**The demo everyone remembers:** `bash scripts/demo_drift.sh` — replays 40 drifted predictions through
-`/predict`, then triggers the check. Output shows z-scores per feature (e.g. `GrLivArea z=1.6`), and a
-retraining workflow appears in the Argo UI with **no human submit**. The promotion gate then honestly
-compares the candidate against Production and refuses it if it's worse (reason is recorded).
+**Where the evidence lives:** MLflow experiment `house-prices` — the Optuna study run with its nested
+trial runs (top row: today's 15-trial study, 1.3 h; below: history from the restored backup):
+
+![mlflow optuna study with nested trials](docs/screenshots/03-mlflow-trials.png)
+
+Registry — `house-price-sk` at Version 8 (challenger), `house-price-nn` at Version 5:
+
+![mlflow model registry](docs/screenshots/05-registry.png)
+
+Model card for the Production model (metrics, winning hyperparams, SHAP top-10, lineage — rendered live
+from `GET /registry/models/house-price-sk/versions/5/card`):
+
+![production model card](docs/screenshots/06-model-card.png)
+
+**The demo everyone remembers, step by step** (`bash scripts/demo_drift.sh` — replays 40 drifted
+predictions through `/predict`, then triggers the check):
+
+1. Drifted traffic in — 40/40 predictions accepted (`GrLivArea` ×2.2, `LotArea` ×1.5, `YearBuilt` +40).
+2. The check fires — `POST /monitoring/check-drift` returns:
+   ```json
+   {
+     "check_id": 2,
+     "verdict": "drift",
+     "triggered_retrain": true,
+     "training_run_id": 1,
+     "features_drifted": {
+       "features": ["GrLivArea"],
+       "details": {"GrLivArea": {"ref_mean": 1515.46, "live_mean": 2836.11, "z": 2.513}},
+       "n_predictions": 80
+     }
+   }
+   ```
+3. No human submits anything — the retraining workflow appears in Argo by itself:
+
+   ![auto-triggered retraining in Argo](docs/screenshots/08-argo-autoretrain.png)
+
+   Dashboard drift section at that moment:
+
+   ![drift check verdict](docs/screenshots/07-drift-check.png)
+
+4. The run completes (15/15 Optuna trials, 8/8 DAG nodes) — then the promotion gate **refuses** the
+   challenger: v8 test RMSE 25070.48 vs Production v5's 23415.45. Production stays v5. A gate that says
+   "no" to a worse candidate is the feature working, not a failure.
 
 **Where to look at what:** MLflow UI = trials/runs/models (nested Optuna runs under experiment
 `house-prices`); MinIO console = the three buckets; `psql` (host 5433, user `mlops`, db `mlops`) =
@@ -401,7 +453,8 @@ minikube stop
 
 Two dataset versions registered with DVC md5-exact round-trips · 15-trial Optuna studies as nested MLflow
 runs · 8-node Argo DAG `Succeeded` (twice — including on a fully rebuilt cluster) · sklearn + PyTorch models
-registered · SHAP artifacts · conditional promotion gate refusing a worse candidate · drift breach (z≈1.6)
-auto-triggering retraining · zero-redeploy serving swap · 100-row batch scoring · 200/401 auth pair with
-audit rows · live dashboard. Honest caveat kept on purpose: the promotion gate once refused a candidate —
-the earlier flashier metrics were target leakage (caught via SHAP), fixed, and the clean model is what serves.
+registered · SHAP artifacts · conditional promotion gate refusing a worse candidate · drift breach
+(`GrLivArea` z=2.513) auto-triggering retraining · zero-redeploy serving swap · 100-row batch scoring ·
+200/401 auth pair with audit rows · live dashboard. Honest caveat kept on purpose: the promotion gate
+refused this run's challenger (v8 RMSE 25070.48 vs Production v5's 23415.45) — and the earlier flashier
+metrics were target leakage (caught via SHAP), fixed, and the clean model is what serves.

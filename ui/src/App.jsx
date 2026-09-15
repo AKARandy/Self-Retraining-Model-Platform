@@ -42,7 +42,9 @@ export default function App() {
   const [apiKey, setApiKey] = useState(localStorage.getItem('apiKey') || '')
 
   const [datasets] = usePolling(() => `${API}/datasets`)
-  const [versions, versionsErr] = usePolling(() => `${API}/datasets/1/versions`)
+  // datasets come back oldest-first; the reseed-safe id is the last row (id 1 only exists on a fresh DB)
+  const dsId = datasets && datasets.length ? datasets[datasets.length - 1].id : 1
+  const [versions, versionsErr] = usePolling(() => `${API}/datasets/${dsId}/versions`)
   const [runs] = usePolling(() => `${API}/train-runs`)
   const [models] = usePolling(() => `${API}/registry/models`)
   const [current, currentErr] = usePolling(() => `${API}/registry/models/house-price-sk/current`)
@@ -73,7 +75,7 @@ export default function App() {
   }
 
   async function submitRun() {
-    await post('/train-runs', { dataset_id: 1, n_trials: 15 })
+    await post('/train-runs', { dataset_id: dsId, n_trials: 15 })
   }
   async function checkDrift() {
     await post('/monitoring/check-drift', {})

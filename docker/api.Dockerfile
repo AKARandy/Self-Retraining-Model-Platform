@@ -3,6 +3,12 @@
 # the API needs mlflow/sklearn/torch for serving, not featuretools.
 FROM python:3.12-slim
 
+# DVC (dataset registration: dvc add/push) requires a git binary + repo;
+# slim has neither. The repo itself is bootstrapped at startup (entrypoint).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY requirements.txt .

@@ -1,6 +1,16 @@
 #!/bin/sh
 set -e
 
+# DVC needs a git repo at the working root (dvc add/push). The image ships
+# without .git (size); bootstrap an ephemeral one on every container start.
+if [ ! -d .git ]; then
+  git init -q .
+  git config user.email "api@mlops.local"
+  git config user.name "mlops-api"
+  git add -A
+  git commit -qm "container baseline"
+fi
+
 # Alembic owns the app `mlops` schema — migrate before serving (idempotent).
 # Uses DATABASE_URL from compose env; never touches MLflow's `mlflow` DB.
 if [ -f ./alembic.ini ]; then
