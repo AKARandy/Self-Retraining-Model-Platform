@@ -3,15 +3,49 @@
 
 [![CI](https://github.com/AKARandy/Self-Retraining-Model-Platform/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/AKARandy/Self-Retraining-Model-Platform/actions/workflows/ci.yml)
 
-A platform that runs one closed loop end to end:
-**live traffic → drift detection → automatic retraining → conditional promotion → served, zero redeploy.**
+## The problem
 
-One FastAPI app (modular monolith) on top of real infrastructure — Postgres, MinIO, MLflow, and Kubernetes
-(minikube) running Argo Workflows — plus a React dashboard. It runs entirely in containers on a local
-Kubernetes cluster, and the architecture maps 1:1 onto managed cloud services.
+Machine learning models rot. A model trained on last year's data quietly gets worse as the world
+moves on: prices shift, customers behave differently, sensors drift. Most teams only find out after
+the damage shows up in revenue or angry users. And fixing it is manual work: an engineer notices,
+pulls fresh data, retrains, compares, deploys. Slow, boring, easy to postpone until it hurts.
 
-**Test case: house prices** (Kaggle House Prices, tabular regression). The dataset is a stand-in —
-the pipeline is dataset-agnostic, and §4.1 covers swapping it for any case.
+## What this is
+
+A platform that does that whole job by itself, in a loop:
+
+1. It serves predictions from the current best model.
+2. It watches every prediction that comes in and compares it against the data the model trained on.
+3. When the new data looks different enough, it retrains on its own. Nobody clicks anything.
+4. It tests the new model against the old one. The new one only goes live if it scores better.
+   Otherwise it stays on the shelf, with the reason recorded.
+5. Swapping models needs no redeploy and no downtime.
+
+## How it works, and why these tools
+
+One Python web app (FastAPI) is the front door: upload data, ask for predictions, check status.
+Behind it, each job has its own tool, all running locally in containers:
+
+- Postgres keeps the records: which datasets exist, which training runs happened, every prediction made.
+- MinIO stores files the way Amazon S3 does: datasets, trained models, reports. It stands in for S3
+  on a local machine.
+- MLflow tracks every training experiment: which settings were tried, what each one scored. Its
+  registry records which model version is live.
+- Argo Workflows runs training as a visible chain of steps: fetch data, check it, build features,
+  train, test, explain, decide. It runs on minikube, a small Kubernetes cluster on your own machine,
+  so every step is reproducible and you can watch each one finish.
+- Optuna picks the model settings by trying dozens of combinations automatically and keeping the best.
+- DVC versions the datasets, so any model can be traced back to the exact data it trained on.
+- A React dashboard shows it all on one page: the live model, the datasets, the runs, the drift checks.
+
+The drift check itself is deliberately boring statistics: compare the average of incoming values
+against the training average, column by column. No black boxes. Cheap to run, easy to understand.
+
+The house prices dataset is only a stand-in to prove the loop works. The pipeline takes any flat
+CSV table, and §4.1 covers swapping it for another case.
+
+Everything runs locally, but each piece maps to a cloud equivalent (Postgres to RDS, MinIO to S3,
+minikube to EKS), so the design carries over when you outgrow a laptop.
 
 *Keywords: MLOps · Argo Workflows · drift detection · Optuna · MLflow · DVC · FastAPI · Kubernetes.*
 
